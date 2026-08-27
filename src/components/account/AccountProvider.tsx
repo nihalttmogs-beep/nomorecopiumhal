@@ -45,28 +45,24 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const configured = isSupabaseConfigured();
 
   const refresh = useCallback(async () => {
-    const session = await supabase.auth.getSession();
-    if (!session.data.session) {
-      setAccounts([]);
-      setAccount(null);
-      setLoading(false);
-      return;
-    }
     try {
-      // Bootstrap returns the existing account or a structured no_account error.
+      const session = await supabase.auth.getSession();
+      if (!session?.data?.session) {
+        setAccounts([]);
+        setAccount(null);
+        setLoading(false);
+        return;
+      }
       const next = await bootstrapAccount();
-      // Load coach-authored content + payment settings BEFORE the account is
-      // visible so components read hydrated data on first render.
-      await hydrateCloudCache();
-      await hydratePaymentSettings();
+      await hydrateCloudCache().catch(() => undefined);
+      await hydratePaymentSettings().catch(() => undefined);
       setAccount(next);
       setAccounts([next]);
     } catch (error) {
       if (error instanceof NoAccountError) {
-        // Signed in but no app account yet — the access page drives creation.
         console.warn("Signed-in identity has no app account yet:", error.message);
       } else {
-        console.error("Account bootstrap failed", error);
+        console.warn("Account session check:", error);
       }
       setAccount(null);
       setAccounts([]);
