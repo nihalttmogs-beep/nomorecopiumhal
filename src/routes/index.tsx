@@ -1,4 +1,6 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useAccount } from "@/components/account/AccountProvider";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -20,6 +22,26 @@ export const Route = createFileRoute("/")({
 });
 
 function WelcomePage() {
+  const navigate = useNavigate();
+  const { account, loading } = useAccount();
+
+  useEffect(() => {
+    // If returning from Google OAuth with access_token in URL hash, forward to /access immediately
+    if (typeof window !== "undefined" && window.location.hash.includes("access_token")) {
+      void navigate({ to: "/access", replace: true });
+      return;
+    }
+
+    if (loading || !account) return;
+    if (account.role === "coach") {
+      void navigate({ to: "/coach/dashboard", replace: true });
+    } else if (account.role === "payment_manager") {
+      void navigate({ to: "/payment/dashboard", replace: true });
+    } else {
+      void navigate({ to: "/client/dashboard", replace: true });
+    }
+  }, [account, loading, navigate]);
+
   return (
     <main className="flex min-h-[100dvh] flex-col items-center justify-center bg-[#080808] px-6 text-center">
       <div className="w-full max-w-md">

@@ -327,15 +327,18 @@ export async function loginCoach(password: string): Promise<{
   throw new Error("Incorrect coach password. Please check your credentials and try again.");
 }
 
-type StoredAccessTicket = { ticket: string; expiresAt: number };
+type StoredAccessTicket = { ticket: string; code?: string; expiresAt: number };
 
-export function storeAccessTicket(ticket: string, expiresInSeconds: number): void {
+export function storeAccessTicket(ticket: string, expiresInSeconds: number, code?: string): void {
   if (typeof window === "undefined") return;
   try {
-    sessionStorage.setItem(
-      ACCESS_CODE_TICKET_STORAGE_KEY,
-      JSON.stringify({ ticket, expiresAt: Date.now() + expiresInSeconds * 1000 }),
-    );
+    const data: StoredAccessTicket = {
+      ticket,
+      code,
+      expiresAt: Date.now() + expiresInSeconds * 1000,
+    };
+    localStorage.setItem(ACCESS_CODE_TICKET_STORAGE_KEY, JSON.stringify(data));
+    sessionStorage.setItem(ACCESS_CODE_TICKET_STORAGE_KEY, JSON.stringify(data));
   } catch {
     // ignore
   }
@@ -344,10 +347,11 @@ export function storeAccessTicket(ticket: string, expiresInSeconds: number): voi
 export function readAccessTicket(): string | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = sessionStorage.getItem(ACCESS_CODE_TICKET_STORAGE_KEY);
+    const raw = localStorage.getItem(ACCESS_CODE_TICKET_STORAGE_KEY) || sessionStorage.getItem(ACCESS_CODE_TICKET_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as StoredAccessTicket;
     if (typeof parsed?.ticket !== "string" || Date.now() > parsed.expiresAt) {
+      localStorage.removeItem(ACCESS_CODE_TICKET_STORAGE_KEY);
       sessionStorage.removeItem(ACCESS_CODE_TICKET_STORAGE_KEY);
       return null;
     }
@@ -360,6 +364,7 @@ export function readAccessTicket(): string | null {
 export function clearAccessTicket(): void {
   if (typeof window === "undefined") return;
   try {
+    localStorage.removeItem(ACCESS_CODE_TICKET_STORAGE_KEY);
     sessionStorage.removeItem(ACCESS_CODE_TICKET_STORAGE_KEY);
   } catch {
     // ignore
