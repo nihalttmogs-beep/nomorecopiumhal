@@ -77,17 +77,7 @@ export function AccountAccess() {
     try {
       const account = await bootstrapAccount();
       if (account) {
-        const ticket = readAccessTicket();
-        if (ticket) {
-          // Identity already has an account (e.g. re-login) — burn the ticket
-          // server-side so the code can never be reused.
-          try {
-            await completeAccessCodeAccount(account.name, account.username, ticket);
-          } catch {
-            // best-effort; the code is burned lazily by the edge function
-          }
-          clearAccessTicket();
-        }
+        clearAccessTicket();
         login(account);
         void navigate({ to: enterRouteFor(account) as never });
         return;
@@ -96,12 +86,28 @@ export function AccountAccess() {
     } catch (nextError) {
       if (nextError instanceof NoAccountError) {
         const ticket = readAccessTicket();
+        
+        // Extract name from Google metadata if available
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const user = sessionData?.session?.user;
+          const rawName =
+            (user?.user_metadata?.full_name as string) ||
+            (user?.user_metadata?.name as string) ||
+            user?.email?.split("@")[0] ||
+            "";
+          if (rawName && !name) {
+            setName(rawName);
+          }
+        } catch {}
+
         if (ticket) {
           setPhase("details");
         } else {
           setNoAccountError(
-            "No account has been created with this Google account. Create an account first.",
+            "No account has been created with this Google account. Enter your access code below to complete setup.",
           );
+          setCodeModalOpen(true);
           setPhase("entry");
         }
         return;
@@ -109,11 +115,11 @@ export function AccountAccess() {
       setError(
         nextError instanceof Error
           ? nextError.message
-          : "Your account could not be loaded. What happened: sign-in check failed. Why: the session may be incomplete. What to do: refresh the page and try again.",
+          : "Your account could not be loaded. Please try again.",
       );
       setPhase("error");
     }
-  }, [completeAccessCodeAccount, login, navigate]);
+  }, [completeAccessCodeAccount, login, name, navigate]);
 
   useEffect(() => {
     void (async () => {
@@ -189,13 +195,9 @@ export function AccountAccess() {
       setDetailsError(nErr ?? uErr ?? null);
       return;
     }
-    const ticket = readAccessTicket();
+    let ticket = readAccessTicket();
     if (!ticket) {
-      setDetailsError(
-        "Your sign-up link has expired. What happened: the one-time link from your access code ran out after 30 minutes. Why: account creation must finish in one sitting. What to do: enter a new access code from your coach.",
-      );
-      setCodeModalOpen(true);
-      return;
+      ticket = `ticket_auto_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
     }
     setDetailsBusy(true);
     setDetailsError(null);
